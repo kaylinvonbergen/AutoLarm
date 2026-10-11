@@ -20,6 +20,11 @@ import com.kaylinvonbergen.autolarm.ui.components.AutoLarmTopBar
 import com.kaylinvonbergen.autolarm.ui.components.AutoLarmBottomBar
 import com.kaylinvonbergen.autolarm.ui.components.MainScreen
 
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import com.kaylinvonbergen.autolarm.domain.model.Task
+import com.kaylinvonbergen.autolarm.ui.screens.tasks.TasksScreen
+
 import kotlinx.coroutines.launch
 
 /**
@@ -66,6 +71,15 @@ fun AutoLarmNavHost(
             currentRoute == AutoLarmRoutes.TASKS ||
             currentRoute == null
 
+    // Temporary in-memory task storage.
+    // This will be replaced by a ViewModel and Room database.
+    val tasks = remember { mutableStateListOf<Task>() }
+
+    // Controls the task creation dialog.
+    var showCreateTaskDialog by remember {
+        mutableStateOf(false)
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
 
@@ -111,16 +125,18 @@ fun AutoLarmNavHost(
                     },
 
                     onAddClick = {
-                        coroutineScope.launch {
-                            val message = when (currentRoute) {
-                                AutoLarmRoutes.TASKS ->
-                                    "Create task - coming soon"
-
-                                else ->
-                                    "Create alarm - coming soon"
+                        when (currentRoute) {
+                            AutoLarmRoutes.TASKS -> {
+                                showCreateTaskDialog = true
                             }
 
-                            snackbarHostState.showSnackbar(message)
+                            AutoLarmRoutes.ALARMS -> {
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "Create alarm - coming soon"
+                                    )
+                                }
+                            }
                         }
                     }
                 )
@@ -146,9 +162,37 @@ fun AutoLarmNavHost(
                 PlaceholderScreen("Alarms")
             }
 
+
             composable(AutoLarmRoutes.TASKS) {
-                PlaceholderScreen("Tasks")
+                TasksScreen(
+                    tasks = tasks,
+
+                    showCreateDialog = showCreateTaskDialog,
+
+                    onDismissCreateDialog = {
+                        showCreateTaskDialog = false
+                    },
+
+                    onCreateTask = { newTask ->
+                        tasks.add(newTask)
+                    },
+
+                    onUpdateTask = { updatedTask ->
+                        val index = tasks.indexOfFirst {
+                            it.id == updatedTask.id
+                        }
+
+                        if (index != -1) {
+                            tasks[index] = updatedTask
+                        }
+                    },
+
+                    onDeleteTask = { task ->
+                        tasks.removeAll { it.id == task.id }
+                    }
+                )
             }
+
 
             composable(AutoLarmRoutes.SETTINGS) {
                 PlaceholderScreen("Settings")

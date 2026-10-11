@@ -27,6 +27,15 @@ import com.kaylinvonbergen.autolarm.ui.screens.tasks.TasksScreen
 
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+
+import com.kaylinvonbergen.autolarm.data.local.AutoLarmDatabase
+import com.kaylinvonbergen.autolarm.data.repository.TaskRepositoryImpl
+import com.kaylinvonbergen.autolarm.ui.screens.tasks.TasksViewModel
+
+
 /**
  * Application navigation destinations.
  */
@@ -71,9 +80,27 @@ fun AutoLarmNavHost(
             currentRoute == AutoLarmRoutes.TASKS ||
             currentRoute == null
 
-    // Temporary in-memory task storage.
-    // This will be replaced by a ViewModel and Room database.
-    val tasks = remember { mutableStateListOf<Task>() }
+
+    // Application context for database initialization.
+    val context = LocalContext.current.applicationContext
+
+    // Create the repository using our Room database.
+    val taskRepository = remember(context) {
+        val database = AutoLarmDatabase.getDatabase(context)
+
+        TaskRepositoryImpl(
+            taskDao = database.taskDao()
+        )
+    }
+
+// Obtain the TasksViewModel.
+    val tasksViewModel: TasksViewModel = viewModel(
+        factory = TasksViewModel.factory(taskRepository)
+    )
+
+// Observe saved tasks.
+    val tasks by tasksViewModel.tasks.collectAsStateWithLifecycle()
+
 
     // Controls the task creation dialog.
     var showCreateTaskDialog by remember {
@@ -163,6 +190,7 @@ fun AutoLarmNavHost(
             }
 
 
+
             composable(AutoLarmRoutes.TASKS) {
                 TasksScreen(
                     tasks = tasks,
@@ -174,24 +202,19 @@ fun AutoLarmNavHost(
                     },
 
                     onCreateTask = { newTask ->
-                        tasks.add(newTask)
+                        tasksViewModel.createTask(newTask)
                     },
 
                     onUpdateTask = { updatedTask ->
-                        val index = tasks.indexOfFirst {
-                            it.id == updatedTask.id
-                        }
-
-                        if (index != -1) {
-                            tasks[index] = updatedTask
-                        }
+                        tasksViewModel.updateTask(updatedTask)
                     },
 
                     onDeleteTask = { task ->
-                        tasks.removeAll { it.id == task.id }
+                        tasksViewModel.deleteTask(task)
                     }
                 )
             }
+
 
 
             composable(AutoLarmRoutes.SETTINGS) {

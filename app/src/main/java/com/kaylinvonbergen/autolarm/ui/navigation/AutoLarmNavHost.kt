@@ -44,8 +44,10 @@ import com.kaylinvonbergen.autolarm.ui.screens.alarms.AlarmsScreen
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.WindowInsets
 
+import android.app.NotificationManager
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
@@ -60,6 +62,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 
 import com.kaylinvonbergen.autolarm.alarm.AlarmScheduler
 import com.kaylinvonbergen.autolarm.alarm.AlarmReceiver
+import com.kaylinvonbergen.autolarm.alarm.AlarmRingingService
 import com.kaylinvonbergen.autolarm.domain.usecase.CalculateWakeUpTimeUseCase
 
 import kotlinx.coroutines.flow.combine
@@ -183,6 +186,10 @@ fun AutoLarmNavHost(
         mutableIntStateOf(0)
     }
 
+    var requestedFullScreenPermission by rememberSaveable {
+        mutableStateOf(false)
+    }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -215,7 +222,7 @@ fun AutoLarmNavHost(
 
 // Register the notification channel.
     LaunchedEffect(context) {
-        AlarmReceiver.createNotificationChannel(context)
+        AlarmRingingService.createNotificationChannel(context)
     }
 
 // Observe real Room emissions instead of the ViewModel's
@@ -298,6 +305,42 @@ fun AutoLarmNavHost(
 
             return@LaunchedEffect
         }
+
+
+        if (Build.VERSION.SDK_INT >= 34) {
+            val notificationManager = context.getSystemService(
+                Context.NOTIFICATION_SERVICE
+            ) as NotificationManager
+
+            if (
+                !notificationManager.canUseFullScreenIntent() &&
+                !requestedFullScreenPermission
+            ) {
+                requestedFullScreenPermission = true
+
+                try {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT
+                    ).apply {
+                        data = Uri.parse(
+                            "package:${context.packageName}"
+                        )
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    android.util.Log.e(
+                        "AutoLarm",
+                        "Could not open full-screen permission settings",
+                        e
+                    )
+                }
+
+                return@LaunchedEffect
+            }
+        }
+
 
         if (
             Build.VERSION.SDK_INT >= 33 &&

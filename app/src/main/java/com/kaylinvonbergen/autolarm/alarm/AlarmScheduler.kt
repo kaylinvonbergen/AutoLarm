@@ -268,4 +268,28 @@ class AlarmScheduler(context: Context) {
             )
         }
     }
+
+
+    /**
+     * Force every enabled alarm to be rescheduled.
+     *
+     * Use after a device restart, time-zone change,
+     * or manual system clock change.
+     */
+    fun forceReconcile(desired: Map<String, LocalTime>) {
+        val oldIds = prefs.getStringSet(
+            KEY_IDS,
+            emptySet()
+        )?.toSet().orEmpty()
+
+        // Invalidate cached trigger times for every known ID.
+        (oldIds + desired.keys).forEach { id ->
+            prefs.edit()
+                .remove(triggerKey(id))
+                .apply()
+        }
+
+        reconcile(desired)
+    }
+
 }

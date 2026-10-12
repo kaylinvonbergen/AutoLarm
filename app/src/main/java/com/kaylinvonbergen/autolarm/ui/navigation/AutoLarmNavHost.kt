@@ -44,6 +44,28 @@ import com.kaylinvonbergen.autolarm.ui.screens.alarms.AlarmsScreen
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.WindowInsets
 
+
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import android.net.Uri
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+
+import com.kaylinvonbergen.autolarm.alarm.AlarmScheduler
+import com.kaylinvonbergen.autolarm.alarm.AlarmReceiver
+import com.kaylinvonbergen.autolarm.domain.usecase.CalculateWakeUpTimeUseCase
+
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
+
+
 /**
  * Application navigation destinations.
  */
@@ -146,7 +168,154 @@ fun AutoLarmNavHost(
     val alarms by alarmsViewModel.alarms.collectAsStateWithLifecycle()
 
 
-        Scaffold(
+// --------------------------------------------------
+// ANDROID ALARM SCHEDULING — PHASE 1
+// --------------------------------------------------
+
+    val alarmScheduler = remember(context) {
+        AlarmScheduler(context)
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+// Refresh scheduling after returning from Android Settings.
+    var permissionRefresh by remember {
+        mutableIntStateOf(0)
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                permissionRefresh++
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+// Track whether we've already shown the permission flows.
+    var requestedExactPermission by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var requestedNotificationPermission by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) {
+            permissionRefresh++
+        }
+
+// Register the notification channel.
+    LaunchedEffect(context) {
+        AlarmReceiver.createNotificationChannel(context)
+    }
+
+// Observe real Room emissions instead of the ViewModel's
+// initial empty StateFlow values.
+    LaunchedEffect(
+        alarmRepository,
+        taskRepository,
+        alarmScheduler,
+        permissionRefresh
+    ) {
+        combine(
+            alarmRepository.alarms,
+            taskRepository.allTasks
+        ) { savedAlarms, savedTasks ->
+            savedAlarms to savedTasks
+        }.collectLatest { (savedAlarms, savedTasks) ->
+
+            val calculator = CalculateWakeUpTimeUseCase()
+
+            val existingTaskIds = savedTasks
+                .map { it.id }
+                .toSet()
+
+            val desiredSchedules = savedAlarms
+                .filter { it.enabled }
+                .associate { alarm ->
+
+                    // Ignore deleted task IDs.
+                    val validAlarm = alarm.copy(
+                        selectedTaskIds =
+                            alarm.selectedTaskIds.filter {
+                                it in existingTaskIds
+                            }
+                    )
+
+                    val result = calculator(
+                        validAlarm,
+                        savedTasks
+                    )
+
+                    alarm.id to result.wakeUpTime
+                }
+
+            // Cancel deleted/disabled alarms, and schedule
+            // any new or modified wake-up times.
+            alarmScheduler.reconcile(desiredSchedules)
+        }
+    }
+
+// Ask for permissions only if an alarm is enabled.
+    LaunchedEffect(alarms, permissionRefresh) {
+        if (alarms.none { it.enabled }) {
+            return@LaunchedEffect
+        }
+
+        if (
+            !alarmScheduler.canScheduleExactAlarms() &&
+            !requestedExactPermission
+        ) {
+            requestedExactPermission = true
+
+            try {
+                val intent = Intent(
+                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM
+                ).apply {
+                    data = Uri.parse(
+                        "package:${context.packageName}"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                android.util.Log.e(
+                    "AutoLarm",
+                    "Could not open exact alarm settings",
+                    e
+                )
+            }
+
+            return@LaunchedEffect
+        }
+
+        if (
+            Build.VERSION.SDK_INT >= 33 &&
+            context.checkSelfPermission(
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            !requestedNotificationPermission
+        ) {
+            requestedNotificationPermission = true
+
+            notificationPermissionLauncher.launch(
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        }
+    }
+
+
+    Scaffold(
             modifier = modifier
                 .fillMaxSize()
                 .safeDrawingPadding(),

@@ -14,7 +14,7 @@ import android.os.Build
 import android.util.Log
 
 import com.kaylinvonbergen.autolarm.MainActivity
-
+import com.kaylinvonbergen.autolarm.R
 class AlarmReceiver : BroadcastReceiver() {
 
     companion object {
@@ -106,21 +106,24 @@ class AlarmReceiver : BroadcastReceiver() {
                     PendingIntent.FLAG_IMMUTABLE
         )
 
+
         val notification = Notification.Builder(
             context,
             CHANNEL_ID
         )
-            .setSmallIcon(
-                android.R.drawable.ic_lock_idle_alarm
-            )
+            .setSmallIcon(R.drawable.ic_stat_autolarm)
             .setContentTitle("Time to get up!")
             .setContentText(
                 "Your AutoLarm wake-up time has arrived."
+            )
+            .setColor(
+                android.graphics.Color.rgb(24, 27, 37)
             )
             .setCategory(Notification.CATEGORY_ALARM)
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .build()
+
 
         notificationManager.notify(
             alarmId.hashCode(),

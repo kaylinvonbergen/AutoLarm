@@ -66,48 +66,39 @@ data class AdditionalAlarmConfig(
  * @property preAlarms Configuration for alarms before wake-up.
  * @property postAlarms Configuration for alarms after wake-up.
  */
+
 data class Alarm(
     val id: String = UUID.randomUUID().toString(),
-
     val name: String = "",
-    val enabled: Boolean = true,
+    val enabled: Boolean = false,
 
-    // Arrival information
-    val arrivalTime: LocalTime,
+    val arrivalDate: java.time.LocalDate =
+        java.time.LocalDate.now().plusDays(1),
+    val arrivalTime: LocalTime = LocalTime.of(9, 0),
+
     val departureLocation: String = "",
     val destinationLocation: String = "",
 
-    // Transportation
     val transportationMode: TransportationMode =
         TransportationMode.DRIVING,
-
     val travelTimeSource: TravelTimeSource =
         TravelTimeSource.MANUAL,
-
     val travelDurationMinutes: Int = 0,
 
-    // Morning routine
     val selectedTaskIds: List<String> = emptyList(),
     val bufferMinutes: Int = 0,
 
-    // Additional alarms
     val preAlarms: AdditionalAlarmConfig =
         AdditionalAlarmConfig(),
-
     val postAlarms: AdditionalAlarmConfig =
-        AdditionalAlarmConfig()
+        AdditionalAlarmConfig(),
+
+    val position: Int = 0
 ) {
     init {
-        require(travelDurationMinutes >= 0) {
-            "Travel duration cannot be negative."
-        }
-
-        require(bufferMinutes >= 0) {
-            "Buffer time cannot be negative."
-        }
-
-        require(selectedTaskIds.distinct().size == selectedTaskIds.size) {
-            "Selected tasks cannot contain duplicate IDs."
-        }
+        require(travelDurationMinutes >= 0)
+        require(bufferMinutes >= 0)
+        require(position >= 0)
+        require(selectedTaskIds.distinct().size == selectedTaskIds.size)
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import com.kaylinvonbergen.autolarm.ui.navigation.AutoLarmNavHost
 import com.kaylinvonbergen.autolarm.ui.theme.AutoLarmTheme
 import com.kaylinvonbergen.autolarm.ui.theme.Background
+import com.kaylinvonbergen.autolarm.ui.theme.NavigationBackground
 
 class MainActivity : ComponentActivity() {
 
@@ -21,7 +22,7 @@ class MainActivity : ComponentActivity() {
             AutoLarmTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = Background
+                    color = NavigationBackground
                 ) {
                     AutoLarmNavHost()
                 }

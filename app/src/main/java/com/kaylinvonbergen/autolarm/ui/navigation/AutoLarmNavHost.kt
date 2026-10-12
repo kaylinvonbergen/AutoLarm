@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import com.kaylinvonbergen.autolarm.ui.screens.info.InfoScreen
 
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -26,6 +27,7 @@ import com.kaylinvonbergen.autolarm.domain.model.Task
 import com.kaylinvonbergen.autolarm.ui.screens.tasks.TasksScreen
 
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.saveable.rememberSaveable
 
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -35,6 +37,12 @@ import com.kaylinvonbergen.autolarm.data.local.AutoLarmDatabase
 import com.kaylinvonbergen.autolarm.data.repository.TaskRepositoryImpl
 import com.kaylinvonbergen.autolarm.ui.screens.tasks.TasksViewModel
 
+import com.kaylinvonbergen.autolarm.data.repository.AlarmRepositoryImpl
+import com.kaylinvonbergen.autolarm.ui.screens.alarms.AlarmsViewModel
+import com.kaylinvonbergen.autolarm.ui.screens.alarms.AlarmsScreen
+
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
 
 /**
  * Application navigation destinations.
@@ -69,16 +77,33 @@ fun AutoLarmNavHost(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+
+    var lastMainRoute by rememberSaveable {
+        mutableStateOf(AutoLarmRoutes.ALARMS)
+    }
+
+// Remember the most recently visited main screen.
+    LaunchedEffect(currentRoute) {
+        if (
+            currentRoute == AutoLarmRoutes.ALARMS ||
+            currentRoute == AutoLarmRoutes.TASKS
+        ) {
+            lastMainRoute = currentRoute
+        }
+    }
+
+
     // Determine which main screen is selected.
-    val selectedScreen = when (currentRoute) {
+    val selectedScreen: MainScreen? = when (currentRoute) {
         AutoLarmRoutes.TASKS -> MainScreen.TASKS
-        else -> MainScreen.ALARMS
+        AutoLarmRoutes.ALARMS -> MainScreen.ALARMS
+        else -> null
     }
 
     // Only display the bottom bar on primary screens.
-    val showBottomBar = currentRoute == AutoLarmRoutes.ALARMS ||
-            currentRoute == AutoLarmRoutes.TASKS ||
-            currentRoute == null
+    val showHomeButton =
+        currentRoute == AutoLarmRoutes.INFO ||
+                currentRoute == AutoLarmRoutes.SETTINGS
 
 
     // Application context for database initialization.
@@ -107,11 +132,28 @@ fun AutoLarmNavHost(
         mutableStateOf(false)
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
 
-        // Shared top bar
-        topBar = {
+    val alarmRepository = remember(context) {
+        AlarmRepositoryImpl(
+            AutoLarmDatabase.getDatabase(context)
+        )
+    }
+
+    val alarmsViewModel: AlarmsViewModel = viewModel(
+        factory = AlarmsViewModel.factory(alarmRepository)
+    )
+
+    val alarms by alarmsViewModel.alarms.collectAsStateWithLifecycle()
+
+
+        Scaffold(
+            modifier = modifier
+                .fillMaxSize()
+                .safeDrawingPadding(),
+
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+
+            topBar = {
             AutoLarmTopBar(
                 onInfoClick = {
                     navController.navigate(AutoLarmRoutes.INFO) {
@@ -134,10 +176,28 @@ fun AutoLarmNavHost(
         },
 
         // Shared bottom bar
-        bottomBar = {
-            if (showBottomBar) {
+
+            bottomBar = {
                 AutoLarmBottomBar(
                     selectedScreen = selectedScreen,
+
+                    showHomeButton = showHomeButton,
+
+
+                    onHomeClick = {
+                        // Return to the previously visited main screen,
+                        // removing Info/Settings screens from the stack.
+                        val returned = navController.popBackStack(
+                            route = lastMainRoute,
+                            inclusive = false
+                        )
+
+                        // Fallback if that screen isn't in the back stack.
+                        if (!returned) {
+                            navController.navigateToMainScreen(lastMainRoute)
+                        }
+                    },
+
 
                     onAlarmsClick = {
                         navController.navigateToMainScreen(
@@ -158,17 +218,22 @@ fun AutoLarmNavHost(
                             }
 
                             AutoLarmRoutes.ALARMS -> {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        "Create alarm - coming soon"
-                                    )
+                                // Keep your existing alarm creation logic.
+                                if (alarms.size < 5) {
+                                    alarmsViewModel.createAlarm()
+                                } else {
+                                    coroutineScope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "You can have a maximum of 5 alarms."
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 )
-            }
-        },
+            },
+
 
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)
@@ -185,9 +250,15 @@ fun AutoLarmNavHost(
                 .padding(innerPadding)
         ) {
 
+
             composable(AutoLarmRoutes.ALARMS) {
-                PlaceholderScreen("Alarms")
+                AlarmsScreen(
+                    alarms = alarms,
+                    tasks = tasks,
+                    viewModel = alarmsViewModel
+                )
             }
+
 
 
 
@@ -222,7 +293,7 @@ fun AutoLarmNavHost(
             }
 
             composable(AutoLarmRoutes.INFO) {
-                PlaceholderScreen("Information")
+                InfoScreen()
             }
         }
     }

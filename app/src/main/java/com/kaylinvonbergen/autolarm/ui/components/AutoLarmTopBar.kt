@@ -36,7 +36,7 @@ fun AutoLarmTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(50.dp)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -71,14 +71,18 @@ fun AutoLarmTopBar(
                 )
             }
 
-            // GitHub button (temporary icon)
+
+
+            // GitHub button
             IconButton(onClick = onGitHubClick) {
-                Text(
-                    text = "GH",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium
+                Icon(
+                    painter = painterResource(id = R.drawable.github_logo),
+                    contentDescription = "Open GitHub repository",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(24.dp)
                 )
             }
+
 
             // Settings button
             IconButton(onClick = onSettingsClick) {
